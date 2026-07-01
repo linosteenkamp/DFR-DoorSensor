@@ -779,6 +779,14 @@ git commit -m "feat: door_contact GPIO/ISR/debounce module"
 > from the reporter (the door sensor has no ADC/e-paper reporting to pause during
 > OTA). Decoupling also keeps `ota_client` reporter-agnostic — better for the
 > future `esp-zb-common` extraction.
+>
+> **Further ED-ism removals (surfaced at full link in Task 8):** the reference OTA
+> burst helpers also managed the receiver for a sleepy end-device —
+> `esp_zb_sleep_enable()` (absent from the router `zczr` lib, a hard link error)
+> and `esp_zb_set_rx_on_when_idle(true/false)`. A router keeps `rx_on_when_idle`
+> true at all times (set once in `zb_router`), and restoring it to `false` on OTA
+> abort/error would silently kill the router's receiver. Both were removed from
+> `ota_client.c`; the OTA burst now only arms/disarms the stall watchdog.
 
 **Files:**
 - Create: `include/ota_ids.h`, `include/fw_version.h`, `include/ota_client.h`, `src/ota_client.c`
