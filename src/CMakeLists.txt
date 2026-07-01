@@ -26,4 +26,7 @@ idf_component_register(
         esp_timer
         nvs_flash
         esp_event
+        esp_driver_gpio
+        app_update
+        esp_partition
 )

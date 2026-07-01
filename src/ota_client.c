@@ -32,9 +32,9 @@ static uint32_t               s_ota_received = 0;   /* bytes of the .ota file se
 #define OTA_IMAGE_SKIP_BYTES  6
 
 /* ---- Burst mode + stall watchdog ----
- * During a download we keep the radio up and pause periodic reports; a one-shot
- * timer aborts the transfer if no block arrives within OTA_STALL_TIMEOUT_MS so a
- * dead server can't leave the device stuck awake (battery drain). */
+ * During a download we pause periodic reports; a one-shot timer aborts the
+ * transfer if no block arrives within OTA_STALL_TIMEOUT_MS so a dead server
+ * can't leave the download stuck open indefinitely. */
 #define OTA_STALL_TIMEOUT_MS  60000
 static TimerHandle_t s_stall_timer = NULL;
 
@@ -46,7 +46,7 @@ static void ota_client_burst_end(void);
 
 static void ota_stall_cb(TimerHandle_t t) {
     (void)t;
-    ESP_LOGW(TAG, "OTA stalled — aborting, returning to sleepy mode");
+    ESP_LOGW(TAG, "OTA stalled — aborting download");
     if (esp_zb_lock_acquire(portMAX_DELAY)) {
         if (s_ota_in_progress) { esp_ota_abort(s_ota_handle); s_ota_in_progress = false; }
         ota_client_burst_end();   /* runs under the lock */

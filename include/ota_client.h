@@ -13,7 +13,7 @@
 esp_err_t ota_client_on_value(const esp_zb_zcl_ota_upgrade_value_message_t *msg);
 
 /* Add the OTA Upgrade client cluster to an existing cluster list (call while
- * building the endpoint in zigbee_reporter's esp_zb_task). */
+ * building the endpoint in zb_router's esp_zb_task). */
 void ota_client_add_cluster(esp_zb_cluster_list_t *clusters);
 
 /* Called once after esp_zb_start: registers the OTA action handler + records the

@@ -53,14 +53,22 @@ void app_main(void)
         esp_restart();
     }
 
+    /* Cache the true boot contact state now. While not-yet-joined this only
+     * writes s_pending_open; on_joined() applies it whenever the join
+     * completes — including the slow path where wait_ready() below times out.
+     * Doing it here (not gated on the wait) avoids a stuck-wrong initial
+     * report if commissioning takes longer than JOIN_TIMEOUT_MS. */
+    zb_router_set_contact(door_contact_is_open());
+
     if (zb_router_wait_ready(JOIN_TIMEOUT_MS)) {
-        ESP_LOGI(TAG, "joined; pushing initial door state");
-        zb_router_set_contact(door_contact_is_open());
+        ESP_LOGI(TAG, "joined on the fast path");
     } else {
-        ESP_LOGW(TAG, "join timeout — stack keeps retrying in background");
+        ESP_LOGW(TAG, "join timeout — stack keeps retrying; on_joined will apply state");
     }
 
-    /* Confirm a freshly-OTA'd image so the bootloader keeps it (no-op otherwise). */
+    /* Rollback policy: reaching app_main() means the freshly-OTA'd image booted
+     * cleanly, so confirm it ("booted = good"). This gates on boot success, not
+     * on Zigbee join. */
     if (ota_client_image_pending_verify()) {
         ota_client_mark_valid();
         ESP_LOGI(TAG, "OTA image confirmed valid");
