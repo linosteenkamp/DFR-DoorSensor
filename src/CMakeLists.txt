@@ -3,6 +3,7 @@ set(SRCS
     "contact_map.c"
     "debounce.c"
     "door_contact.c"
+    "ias_status.c"
     "ota_client.c"
     "zb_router.c"
 )
