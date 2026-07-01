@@ -24,7 +24,9 @@ No battery monitoring, no deep sleep, no ADC, no display.
   `esp-zb-common` library (its own future spec).
 
 ### Out of scope (YAGNI for v1)
-- Config portal (SoftAP). Device name is **compile-time**; rename in the z2m UI.
+- **Custom z2m converter.** IAS Zone contact sensors are recognized natively; naming
+  and any label handling is done in the Zigbee2MQTT UI via `friendly_name`.
+- Config portal (SoftAP), NVS device-naming, Basic LocationDescription label.
 - Status LED, e-paper display, battery monitoring.
 - Tamper detection via the spare SPDT throw.
 
@@ -32,7 +34,7 @@ No battery monitoring, no deep sleep, no ADC, no display.
 
 Between MoistureTracker (sleepy end-device) and this door sensor (always-on router)
 the genuinely reusable overlap is: Zigbee stack bring-up, OTA client + partition /
-rollback layout, NVS device-naming, and the z2m converter pattern. The two devices
+rollback layout, and Basic-cluster device identity. The two devices
 diverge on the hardest-to-abstract part — role and sleep policy — so the abstraction
 is **not yet proven**.
 
@@ -80,15 +82,18 @@ later without touching call sites.
 | `zb_router` | `src/zb_router.c` | Zigbee init as `ESP_ZB_DEVICE_TYPE_ROUTER`, BDB steering / join, signal handler, endpoint + cluster registration. **No** light-sleep arming (router stays awake). | ⇢ core (parameterize role + endpoint builder) |
 | `ias_zone` | `src/ias_zone.c` | IAS Zone cluster: CIE address write handling, zone enrollment, ZoneType `0x0015` (contact switch), ZoneStatus update + report helper. | ⇢ core (generic IAS Zone helper) |
 | `ota_client` | `src/ota_client.c` | Zigbee OTA download + rollback self-check gate (ported from MoistureTracker). | ⇢ core |
-| `device_config` | `src/device_config.c` | NVS device name/id; Basic-cluster LocationDescription (0x0010) → z2m `label`. | ⇢ core |
 | `main` | `src/main.c` | Wiring: init order, config constants, callback registration. | stays local |
+
+The Basic-cluster identity strings (manufacturer / model / device name) are set inline
+during endpoint registration in `zb_router` — z2m uses model+manufacturer to pick the
+device definition. No separate `device_config` module in v1.
 
 ## 5. Zigbee Behavior (IAS Zone)
 
 - **Endpoint:** single endpoint, Home Automation profile, IAS Zone sensor device id.
-- **Clusters:** Basic (0x0000, incl. LocationDescription for the z2m label),
-  Identify (0x0003), IAS Zone (0x0500, `ZoneType = 0x0015` contact switch),
-  OTA Upgrade (0x0019).
+- **Clusters:** Basic (0x0000, with manufacturer / model identity strings for z2m
+  device recognition), Identify (0x0003), IAS Zone (0x0500, `ZoneType = 0x0015`
+  contact switch), OTA Upgrade (0x0019).
 - **Join:** BDB steering into any permit-join network — same pattern as MoistureTracker
   minus the light-sleep arming. Router role means the device keeps the radio on and
   relays for neighbours.
@@ -100,10 +105,8 @@ later without touching call sites.
 - **ZoneStatus:** bit 0 (alarm1) = contact open. Contact polarity (which switch throw
   counts as "closed") is set by compile-time flag `DOOR_CONTACT_ACTIVE_LOW`, allowing
   either NO or NC wiring.
-- **z2m:** IAS Zone contact sensors are recognized natively — expected to need **no
-  custom converter**. If the `label` field is wanted, a small converter mirroring
-  MoistureTracker's `z2m/` pattern exposes it. Verified against the live z2m during
-  bring-up.
+- **z2m:** IAS Zone contact sensors are recognized natively — **no custom converter**.
+  Device naming/labels are handled directly in the Zigbee2MQTT UI (`friendly_name`).
 
 ## 6. Hardware / Wiring
 
@@ -135,8 +138,8 @@ later without touching call sites.
   `otadata`, `ota_0`, `ota_1`, `storage`, `zb_storage` fat, `zb_fct` fat) to support
   Zigbee OTA with rollback.
 - **Key constants (`src/main.c`):**
-  - `DEFAULT_DEVICE_ID "door01"` — compile-time device name (rename in z2m).
-  - `DOOR_CONTACT_GPIO 5`
+  - `DEFAULT_DEVICE_ID "door01"` — Basic-cluster model/name string (rename in z2m).
+  - `DOOR_CONTACT_GPIO 5`  // confirmed
   - `DOOR_DEBOUNCE_MS 40`
   - `KEEPALIVE_REPORT_MIN 60`
   - `DOOR_CONTACT_ACTIVE_LOW 1` — polarity for NO vs NC wiring.
@@ -162,6 +165,4 @@ later without touching call sites.
 
 ## 10. Open Questions / Deferred
 
-- Exact free GPIO confirmed against the FireBeetle 2 ESP32-C6 pinout at implementation.
-- Whether z2m needs any converter at all for the `label` field (verify on live z2m).
 - Future `esp-zb-common` extraction — separate spec once a second device type ships.
