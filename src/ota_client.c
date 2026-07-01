@@ -55,10 +55,9 @@ static void ota_stall_cb(TimerHandle_t t) {
 }
 
 static void ota_client_burst_begin(void) {
-    /* Router builds are mains-powered with the radio always on (no ZB sleep
-     * mode compiled in — esp_zb_sleep_enable() only exists in the end-device
-     * library variant), so only rx-on-when-idle needs toggling here. */
-    esp_zb_set_rx_on_when_idle(true);           /* keep receiver up for blocks */
+    /* Router builds are mains-powered with the radio always on (rx-on-when-idle
+     * stays true at all times per zb_router.c — no ED-style receiver toggling
+     * needed here). Just arm the stall watchdog for this download. */
     if (!s_stall_timer) {
         s_stall_timer = xTimerCreate("ota_stall", pdMS_TO_TICKS(OTA_STALL_TIMEOUT_MS),
                                      pdFALSE, NULL, ota_stall_cb);
@@ -77,7 +76,6 @@ static void ota_client_burst_kick(void) {
 
 static void ota_client_burst_end(void) {
     if (s_stall_timer) xTimerStop(s_stall_timer, 0);
-    esp_zb_set_rx_on_when_idle(false);          /* back to router default idle behavior */
     ESP_LOGI(TAG, "burst mode OFF");
 }
 
