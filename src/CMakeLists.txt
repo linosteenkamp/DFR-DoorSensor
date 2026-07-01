@@ -1,5 +1,8 @@
 set(SRCS
     "main.c"
+    "contact_map.c"
+    "debounce.c"
+    "door_contact.c"
 )
 
 # Managed-component include path, added unconditionally so it resolves in the
