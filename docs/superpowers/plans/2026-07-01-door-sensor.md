@@ -885,6 +885,14 @@ git commit -m "chore: port Zigbee OTA client (door-sensor identity, reporter-dec
 
 ## Task 7: `zb_router` — Zigbee router bring-up + IAS Zone + shared dispatcher (on-device)
 
+> **Revised during execution (deadlock fix):** the original Step 3/4 code called the
+> lock-taking `zb_router_set_contact()` from `on_joined()` and `keepalive_cb()`, which
+> both run in Zigbee callback context where the stack lock is already held —
+> `esp_zb_lock_acquire()` there self-deadlocks the stack task on every join. Split into
+> a no-lock `apply_contact_no_lock()` (for stack-context callers) and the lock-taking
+> public `zb_router_set_contact()` (for external app tasks), mirroring the reference
+> project's `update_attributes_no_lock` / `zigbee_reporter_report` split.
+
 **Files:**
 - Create: `include/zb_router.h`, `src/zb_router.c`
 - Modify: `src/CMakeLists.txt` (add `zb_router.c`)
@@ -978,8 +986,9 @@ static volatile bool s_pending_open = false;  /* last requested state (pre/post 
 Append to `src/zb_router.c`:
 
 ```c
-/* forward decl */
+/* forward decls */
 static void keepalive_cb(uint8_t param);
+static void apply_contact_no_lock(bool open);   /* caller must hold the Zigbee lock */
 
 /* Single global core-action dispatcher: OTA + IAS Zone. Only ONE may be
  * registered stack-wide, so it lives here (ota_client's own registration was
@@ -1011,8 +1020,10 @@ static void on_joined(void)
     ESP_LOGI(TAG, "joined network, short addr 0x%04hx", esp_zb_get_short_address());
     ota_client_on_joined();
     /* Apply the latest door state now that the network is up, then start the
-     * keepalive refresh cycle. */
-    zb_router_set_contact(s_pending_open);
+     * keepalive refresh cycle. We are in Zigbee callback context (the signal
+     * handler already holds the Zigbee lock), so use the no-lock apply — calling
+     * the lock-taking zb_router_set_contact() here would self-deadlock. */
+    apply_contact_no_lock(s_pending_open);
     esp_zb_scheduler_alarm(keepalive_cb, 0, 1000U);
 }
 
@@ -1061,15 +1072,45 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
 
 Append to `src/zb_router.c`:
 
+Two-context split (mirrors the reference project's `update_attributes_no_lock` /
+`zigbee_reporter_report` pattern). `apply_contact_no_lock()` writes the ZoneStatus
+attribute **without** taking the Zigbee lock — the caller must already hold it.
+Stack-context callers (`on_joined`, `keepalive_cb`, both run from Zigbee callbacks
+that already hold the lock) call it directly. The public `zb_router_set_contact()`,
+invoked from external application tasks (e.g. the door_contact `esp_timer` callback),
+takes the lock and then delegates. Acquiring the lock from a context that already
+holds it would self-deadlock the stack task, so the two paths must stay distinct.
+
 ```c
-/* Re-apply the current ZoneStatus periodically as a state-recovery keepalive. */
+/* Write the IAS Zone ZoneStatus attribute WITHOUT taking the Zigbee lock. The
+ * caller MUST already hold it — either running in Zigbee stack/callback context
+ * (signal handler, scheduler alarm) or wrapped in esp_zb_lock_acquire/release. */
+static void apply_contact_no_lock(bool open)
+{
+    s_zone_status = ias_zone_status_encode(open);
+    esp_zb_zcl_set_attribute_val(APP_ENDPOINT,
+                                 ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE,
+                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                 ESP_ZB_ZCL_ATTR_IAS_ZONE_ZONESTATUS_ID,
+                                 &s_zone_status,
+                                 false);
+    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x)", open ? "OPEN" : "CLOSED", s_zone_status);
+}
+
+/* Re-apply the current ZoneStatus periodically as a state-recovery keepalive.
+ * Runs in Zigbee scheduler/stack context (lock already held) -> no-lock apply. */
 static void keepalive_cb(uint8_t param)
 {
     (void)param;
-    zb_router_set_contact(s_pending_open);
+    if (s_joined) {
+        apply_contact_no_lock(s_pending_open);
+    }
     esp_zb_scheduler_alarm(keepalive_cb, 0, KEEPALIVE_REPORT_MIN * 60U * 1000U);
 }
 
+/* Public setter for EXTERNAL application tasks (not stack callbacks). Takes the
+ * Zigbee lock, then delegates to the no-lock apply. Safe before join: the value
+ * is cached in s_pending_open and applied by on_joined() once the network is up. */
 void zb_router_set_contact(bool open)
 {
     s_pending_open = open;
@@ -1080,15 +1121,8 @@ void zb_router_set_contact(bool open)
         ESP_LOGE(TAG, "failed to acquire Zigbee lock");
         return;
     }
-    s_zone_status = ias_zone_status_encode(open);
-    esp_zb_zcl_set_attribute_val(APP_ENDPOINT,
-                                 ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE,
-                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
-                                 ESP_ZB_ZCL_ATTR_IAS_ZONE_ZONESTATUS_ID,
-                                 &s_zone_status,
-                                 false);
+    apply_contact_no_lock(open);
     esp_zb_lock_release();
-    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x)", open ? "OPEN" : "CLOSED", s_zone_status);
 }
 ```
 
