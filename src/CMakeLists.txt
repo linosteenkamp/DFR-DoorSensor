@@ -4,6 +4,7 @@ set(SRCS
     "debounce.c"
     "door_contact.c"
     "ota_client.c"
+    "zb_router.c"
 )
 
 # Managed-component include path, added unconditionally so it resolves in the
