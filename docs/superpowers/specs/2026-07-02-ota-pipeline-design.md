@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-02
 **Status:** Approved (design), pending implementation plan
-**Repo:** DFR-DoorSensor (hosts the shared aggregator tool) + each `DFR-*` firmware repo
+**Repos:** `dfr-ota-server` (new, dedicated repo — hosts the family-wide aggregator) +
+each `DFR-*` firmware repo (per-repo release CI, DFR-DoorSensor first). This design doc
+lives in DFR-DoorSensor for provenance; the aggregator is implemented in `dfr-ota-server`.
 **z2m host:** Raspberry Pi, `ssh lino@499.steenkamps.org`, z2m running **natively** (not Docker)
 
 ## 1. Problem & Goal
@@ -33,8 +35,10 @@ z2m configuration.
   topic/glob auto-discovery (deferred).
 - **Rollout:** **manual per-device** — `disable_automatic_update_check: true`; updates
   triggered in the z2m UI. A bad image never auto-deploys fleet-wide.
-- **Tool location:** the aggregator (`dfr-ota-sync`) is a **standalone tool inside the
-  DFR-DoorSensor repo** (family-scoped infra that happens to live here).
+- **Tool location:** the aggregator (`dfr-ota-sync`) lives in its own **dedicated repo
+  `dfr-ota-server`** (private) — family-wide runtime infra, distinct from the future
+  `esp-zb-common` (which is build-time C firmware library code). A firmware repo is the
+  wrong home for a Pi-side Python service.
 - **Serving:** `python3 -m http.server` on **:8091**, LAN-only, read-only dir.
 
 ## 3. Architecture
@@ -77,14 +81,16 @@ DFR-DoorSensor gains the workflow it lacks, ported from MoistureTracker:
 The committed `ota/index.json` per repo is the **authoritative metadata** (modelId,
 manufacturerCode, imageType, fileVersion, fileSize, sha512, url) the aggregator reuses.
 
-### 4.2 `dfr-ota-sync` aggregator (the new core) — `DFR-DoorSensor/ota-server/`
+### 4.2 `dfr-ota-sync` aggregator (the new core) — dedicated repo `dfr-ota-server`
 
-Python 3 **stdlib only** (the Pi has python3; no pip deps). Files:
+Python 3 **stdlib only** (the Pi has python3; no pip deps). Repo layout:
 - `dfr_ota_sync.py` — the sync tool.
 - `repos.conf.example` — sample config.
 - `systemd/dfr-ota-sync.service`, `systemd/dfr-ota-sync.timer`, `systemd/dfr-ota-serve.service`.
+- `install.sh` — user/dirs/units setup.
 - `tests/test_dfr_ota_sync.py` — pytest for the pure logic.
-- `README.md` — install + operation.
+- `.github/workflows/ci.yml` — run the pytest suite on push.
+- `README.md` — install + operation, and the z2m config snippet.
 
 **Config** (`/etc/dfr-ota/repos.conf`): one `owner/repo` per line (comments with `#`).
 **Secret** (`/etc/dfr-ota/token`, `chmod 600`): a fine-grained GitHub PAT, **Contents:
@@ -139,10 +145,11 @@ version (devices report `FW_VERSION_U32`).
 
 ## 6. Deployment
 
-Dedicated unprivileged user `dfr-ota`. `install.sh` (or documented steps): create user +
-`/var/lib/dfr-ota` + `/etc/dfr-ota/{repos.conf,token}`; install the three systemd units;
-`systemctl enable --now dfr-ota-sync.timer dfr-ota-serve.service`. Manual refresh:
-`systemctl start dfr-ota-sync.service`. Logs via journald.
+On the Pi: clone `dfr-ota-server`, run `install.sh` — creates the dedicated
+unprivileged user `dfr-ota`, `/var/lib/dfr-ota`, and `/etc/dfr-ota/{repos.conf,token}`;
+installs the three systemd units; `systemctl enable --now dfr-ota-sync.timer
+dfr-ota-serve.service`. Manual refresh: `systemctl start dfr-ota-sync.service`. Logs via
+journald. Updating the tool later = `git pull` + restart.
 
 ## 7. Failure handling & security
 
@@ -174,7 +181,9 @@ Dedicated unprivileged user `dfr-ota`. `install.sh` (or documented steps): creat
 - Public artifact mirror.
 - Fleet dashboards, staged % rollouts, auto-rollback orchestration (device already has
   bootloader rollback).
-- Migrating `dfr-ota-sync` into the future shared `esp-zb-common` infrastructure.
+- Topic-based auto-discovery could later replace the explicit `repos.conf` list.
+  (`dfr-ota-server` stays its own repo — it is intentionally NOT part of the build-time
+  `esp-zb-common` firmware library.)
 
 ## 10. Confirm at implementation (Pi currently unreachable from dev env)
 
