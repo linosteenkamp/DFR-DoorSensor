@@ -21,6 +21,8 @@
 #include "zcl/esp_zigbee_zcl_basic.h"
 #include "zcl/esp_zigbee_zcl_ias_zone.h"
 #include "zcl/esp_zigbee_zcl_core.h"
+#include "zcl/esp_zigbee_zcl_command.h"   /* esp_zb_zcl_ias_zone_status_change_notif_cmd_req */
+#include "aps/esp_zigbee_aps.h"           /* ESP_ZB_APS_ADDR_MODE_16_ENDP_PRESENT */
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -131,13 +133,38 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
 static void apply_contact_no_lock(bool open)
 {
     s_zone_status = ias_zone_status_encode(open);
+
+    /* Keep the local ZoneStatus attribute current so reads / interview reflect
+     * the live state. NOTE: setting the attribute (even with reporting configured)
+     * is NOT how z2m learns of zone changes. */
     esp_zb_zcl_set_attribute_val(APP_ENDPOINT,
                                  ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE,
                                  ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
                                  ESP_ZB_ZCL_ATTR_IAS_ZONE_ZONESTATUS_ID,
                                  &s_zone_status,
                                  false);
-    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x)", open ? "OPEN" : "CLOSED", s_zone_status);
+
+    /* Deliver the change to the CIE (coordinator) via the IAS Zone Status Change
+     * Notification command (cluster cmd 0x00). This — not attribute reporting — is
+     * how z2m's IAS handler receives contact state. Addressed explicitly to the
+     * coordinator (0x0000, ep 1) so it works whether or not formal enrollment
+     * completed. */
+    esp_zb_zcl_ias_zone_status_change_notif_cmd_t notif = {
+        .zcl_basic_cmd = {
+            .dst_addr_u.addr_short = 0x0000,   /* coordinator / CIE */
+            .dst_endpoint          = 1,
+            .src_endpoint          = APP_ENDPOINT,
+        },
+        .address_mode  = ESP_ZB_APS_ADDR_MODE_16_ENDP_PRESENT,
+        .zone_status   = s_zone_status,
+        .extend_status = 0,
+        .zone_id       = 0,
+        .delay         = 0,
+    };
+    esp_zb_zcl_ias_zone_status_change_notif_cmd_req(&notif);
+
+    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x) [notif -> coordinator]",
+             open ? "OPEN" : "CLOSED", s_zone_status);
 }
 
 /* Re-apply the current ZoneStatus periodically as a state-recovery keepalive.
