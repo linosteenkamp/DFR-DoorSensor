@@ -6,7 +6,7 @@ contact** sensor. Because it joins as a router, it also relays traffic and
 extends the mesh. Supports Zigbee OTA with rollback.
 
 See [CLAUDE.md](CLAUDE.md) for architecture and
-[docs/superpowers/specs/2026-07-01-door-sensor-design.md](docs/superpowers/specs/2026-07-01-door-sensor-design.md)
+[docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md](docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md)
 for the design spec.
 
 ## Build & flash

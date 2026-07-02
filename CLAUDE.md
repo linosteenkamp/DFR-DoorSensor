@@ -18,7 +18,7 @@ partition/rollback scheme. Follow its conventions; this project strips out the
 battery/ADC/display/deep-sleep parts, swaps the end-device role for a router, and
 needs no z2m converter (IAS Zone is recognized natively).
 
-**Design spec:** [docs/superpowers/specs/2026-07-01-door-sensor-design.md](docs/superpowers/specs/2026-07-01-door-sensor-design.md)
+**Design spec:** [docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md](docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md) (implemented — archived)
 
 ## Key Differences from MoistureTracker
 
