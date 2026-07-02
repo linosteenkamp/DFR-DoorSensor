@@ -12,8 +12,8 @@
 
 - **Aggregator language:** Python 3 **stdlib only** — no pip runtime deps. pytest is dev/CI only.
 - **Aggregator repo:** new private repo `dfr-ota-server`; local working dir `/Users/lino/Developer/499/dfr-ota-server`.
-- **Serve:** `python3 -m http.server 8091`, LAN-only, read-only; serve dir `/var/lib/dfr-ota` containing `index.json` + `ota/*.ota`.
-- **z2m override URL:** `http://<pi-lan>:8091/index.json`; `ota.disable_automatic_update_check: true`.
+- **Serve:** `python3 -m http.server 8091 --bind 127.0.0.1` (**loopback only** — z2m is co-located), read-only; serve dir `/var/lib/dfr-ota` containing `index.json` + `ota/*.ota`.
+- **z2m override URL:** `http://localhost:8091/index.json`; `ota.disable_automatic_update_check: true` (already set on the Pi).
 - **Door-sensor OTA identity (exact):** manufacturer `0xFEFE`, image type `0x0002`, model `DFR-DoorSensor`, header string `DFR-DoorSensor OTA`.
 - **Index entry schema (z2m):** `modelId, manufacturerCode (int), imageType (int), fileVersion (int), fileSize (int), sha512 (hex str), url`.
 - **Entry identity for merge/dedupe:** `(manufacturerCode, imageType)`; newer overwrites.
@@ -21,7 +21,7 @@
 - **Secrets:** read-only fine-grained GitHub PAT (Contents:read on the listed repos) at `/etc/dfr-ota/token` (chmod 600); repo list at `/etc/dfr-ota/repos.conf`. Never commit either.
 - **Private-repo asset download:** GitHub asset API 302-redirects to S3 which rejects the `Authorization` header — the fetcher MUST strip `Authorization` on redirect.
 - **Atomicity:** build in staging, verify all, then swap; a failing repo never removes healthy images (last-good retained).
-- **Pi env facts to confirm at deploy (Pi unreachable from dev now):** exact z2m `configuration.yaml` path, running z2m OTA config keys, Pi LAN IP, `python3` version.
+- **Pi env (confirmed via SSH `lino@499.steenkamps.org`):** RPi aarch64, Debian; `python3` 3.11.2; passwordless sudo; z2m **2.4.0 native** (`zigbee2mqtt.service`, `User=lino`, `WorkingDirectory=/opt/zigbee2mqtt`); active config `/opt/zigbee2mqtt/data/configuration.yaml` (already has `zigbee_ota_override_index_location: http://localhost:8081/index.json` + `disable_automatic_update_check: true`); port 8091 free; LAN IP 192.168.1.3 (not needed — loopback bind). Reach the Pi with sandbox disabled (network egress is sandboxed off by default).
 
 ---
 
@@ -672,8 +672,9 @@ install -d -m 750 /etc/dfr-ota
 [ -f /etc/dfr-ota/token ] || { touch /etc/dfr-ota/token; chmod 600 /etc/dfr-ota/token; echo "!! put a read-only GitHub PAT in /etc/dfr-ota/token"; }
 # /etc/dfr-ota/env holds BASE_URL, BIND_ADDR, SERVE_PORT (edit after install)
 [ -f /etc/dfr-ota/env ] || cat > /etc/dfr-ota/env <<'EOF'
-BASE_URL=http://REPLACE_WITH_PI_LAN_IP:8091
-BIND_ADDR=0.0.0.0
+# z2m is co-located -> serve on loopback only; z2m fetches via localhost.
+BASE_URL=http://localhost:8091
+BIND_ADDR=127.0.0.1
 SERVE_PORT=8091
 EOF
 mkdir -p "$REPO_DIR" && cp -r "$(dirname "$0")"/dfr_ota_sync.py "$REPO_DIR"/
@@ -872,7 +873,7 @@ git commit -m "ci: tag-triggered Zigbee OTA release (door identity 0xFEFE/0x0002
 
 ## Phase C — Deploy + end-to-end acceptance (manual; needs Pi access + token)
 
-> Requires: SSH to the Pi (`ssh lino@499.steenkamps.org`, currently unreachable from dev — run from the LAN), a read-only fine-grained PAT, and z2m admin. Do NOT commit the token anywhere.
+> Requires: SSH to the Pi (`ssh lino@499.steenkamps.org` — works with key auth; **run Bash with the sandbox disabled**, network egress is sandboxed off by default), a read-only fine-grained PAT, and z2m admin (passwordless sudo confirmed). Do NOT commit the token anywhere.
 
 ### Task C1: Publish repos, deploy the Pi service, wire z2m, verify a real update
 
@@ -904,7 +905,7 @@ git clone https://github.com/linosteenkamp/dfr-ota-server /opt/dfr-ota-server
 cd /opt/dfr-ota-server && sudo ./install.sh
 echo "<PAT>" | sudo tee /etc/dfr-ota/token >/dev/null    # then verify chmod 600
 sudoedit /etc/dfr-ota/repos.conf   # add linosteenkamp/DFR-DoorSensor
-sudoedit /etc/dfr-ota/env          # BASE_URL=http://<pi-lan-ip>:8091
+# /etc/dfr-ota/env defaults are correct for this Pi (BASE_URL=http://localhost:8091, BIND_ADDR=127.0.0.1)
 sudo systemctl restart dfr-ota-serve.service
 sudo systemctl start dfr-ota-sync.service
 journalctl -u dfr-ota-sync.service -n 30 --no-pager
@@ -914,14 +915,14 @@ Expected: journal shows `linosteenkamp/DFR-DoorSensor: 1 image(s) OK; served 1`.
 - [ ] **Step 4: Verify the LAN index + image**
 
 ```bash
-curl -s http://<pi-lan-ip>:8091/index.json
-curl -sI http://<pi-lan-ip>:8091/ota/firmware-1.0.0.ota | head -1
+curl -s http://localhost:8091/index.json
+curl -sI http://localhost:8091/ota/firmware-1.0.0.ota | head -1
 ```
-Expected: index lists the door sensor with a `http://<pi-lan-ip>:8091/ota/...` url; the `.ota` returns `200 OK`.
+Expected: index lists the door sensor with a `http://localhost:8091/ota/...` url; the `.ota` returns `200 OK`.
 
 - [ ] **Step 5: Point z2m at it + verify an end-to-end update**
 
-Edit z2m `configuration.yaml` `ota:` (`zigbee_ota_override_index_location: http://<pi-lan-ip>:8091/index.json`, `disable_automatic_update_check: true`), restart z2m. In the z2m UI: the door sensor shows an available update; click Update; confirm it downloads, applies, reboots, and reports the new `fileVersion`. Confirm bootloader rollback is intact (device stays joined post-update).
+In `/opt/zigbee2mqtt/data/configuration.yaml`, change the existing `ota.zigbee_ota_override_index_location` from `http://localhost:8081/index.json` to **`http://localhost:8091/index.json`** (`disable_automatic_update_check: true` is already set). Restart: `sudo systemctl restart zigbee2mqtt`. In the z2m UI: the door sensor shows an available update; click Update; confirm it downloads, applies, reboots, and reports the new `fileVersion`. Confirm the device stays joined post-update (bootloader rollback intact). Retire the old hand-run `:8081` server.
 
 - [ ] **Step 6: Confirm the timer keeps it fresh**
 
