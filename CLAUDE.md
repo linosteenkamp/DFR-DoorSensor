@@ -87,7 +87,7 @@ Do not build that cross-repo library in this project.
 #define DOOR_CONTACT_GPIO        5         // Confirmed
 #define DOOR_DEBOUNCE_MS         40        // Snap-action debounce window
 #define KEEPALIVE_REPORT_MIN     60        // Periodic ZoneStatus refresh
-#define DOOR_CONTACT_ACTIVE_LOW  1         // Polarity for NO vs NC wiring (1 = LOW is open; bench unit, corrected in v1.0.1)
+#define DOOR_CONTACT_ACTIVE_LOW  0         // Polarity for NO vs NC wiring (0 = HIGH is open; door closed pulls the pin LOW — verified on-device in v1.0.4)
 ```
 
 ## Hardware / Wiring

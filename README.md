@@ -121,7 +121,7 @@ Tunables live in [src/main.c](src/main.c):
 #define DEFAULT_DEVICE_ID        "door01"  // Basic-cluster model/name; rename in z2m UI
 #define DOOR_CONTACT_GPIO        5         // Contact input pin
 #define DOOR_DEBOUNCE_MS         40        // Snap-action debounce window
-#define DOOR_CONTACT_ACTIVE_LOW  1         // Polarity: 1 = LOW level is "open"
+#define DOOR_CONTACT_ACTIVE_LOW  0         // Polarity: 0 = HIGH level is "open" (door closed pulls the pin LOW)
 #define JOIN_TIMEOUT_MS          30000     // Fast-path join wait (stack keeps retrying after)
 ```
 
@@ -174,7 +174,7 @@ See [CLAUDE.md](CLAUDE.md) for the module contract and extraction plan.
 | Default device ID (Basic model/name) | `door01` |
 | Contact GPIO | 5 |
 | Debounce window | 40 ms |
-| Contact polarity | active-low (`DOOR_CONTACT_ACTIVE_LOW=1`) |
+| Contact polarity | active-high (`DOOR_CONTACT_ACTIVE_LOW=0`) |
 | Keepalive report interval | 60 min |
 | OTA query interval | 30 min |
 | OTA identity | manufacturerCode `0xFEFE`, imageType `0x0002` |

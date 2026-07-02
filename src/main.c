@@ -17,7 +17,7 @@
 #define DEFAULT_DEVICE_ID        "door01"   /* Basic model/name; rename in z2m UI */
 #define DOOR_CONTACT_GPIO        5
 #define DOOR_DEBOUNCE_MS         40
-#define DOOR_CONTACT_ACTIVE_LOW  1   /* LOW = open (contact polarity corrected on-device) */
+#define DOOR_CONTACT_ACTIVE_LOW  0   /* HIGH = open: door CLOSED shorts the pull-up to GND (pin LOW). Verified on-device against z2m v1.0.4 */
 #define JOIN_TIMEOUT_MS          30000
 
 static const char *TAG = "MAIN";

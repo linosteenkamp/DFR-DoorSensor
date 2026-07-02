@@ -69,15 +69,20 @@ to logical **door-open**:
 
 | `DOOR_CONTACT_ACTIVE_LOW` | Pin LOW means | Pin HIGH means |
 |---|---|---|
-| `1` (default) | door **open** | door **closed** |
-| `0` | door **closed** | door **open** |
+| `0` (default) | door **closed** | door **open** |
+| `1` | door **open** | door **closed** |
 
 With the internal pull-up, the pin is LOW only while the chosen throw shorts it to
 GND, so the right value depends on whether you wired **NO** or **NC** and on the
 switch's resting position relative to the door. If z2m reports open/closed inverted,
 flip this constant, rebuild, and re-flash — no rewiring required.
 
-> The default `1` was confirmed on the bench unit (corrected from `0` in v1.0.1).
+> The default `0` is correct for the bench unit: the closed door shorts the switch's
+> wired throw, pulling the input **LOW** when closed. It was briefly set to `1` in
+> v1.0.1 — a mis-diagnosis made while the OTA version display was broken (so the unit
+> under test wasn't actually running the firmware being reasoned about) — and
+> corrected back to `0` in **v1.0.4** after verifying against z2m's IAS Zone contact
+> semantics (`alarm_1` set ⇒ z2m shows "Open").
 
 ## Power
 
