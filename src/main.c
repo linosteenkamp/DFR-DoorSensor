@@ -17,7 +17,7 @@
 #define DEFAULT_DEVICE_ID        "door01"   /* Basic model/name; rename in z2m UI */
 #define DOOR_CONTACT_GPIO        5
 #define DOOR_DEBOUNCE_MS         40
-#define DOOR_CONTACT_ACTIVE_LOW  1
+#define DOOR_CONTACT_ACTIVE_LOW  0   /* KW11-2N wired on the opposite throw: HIGH = open */
 #define JOIN_TIMEOUT_MS          30000
 
 static const char *TAG = "MAIN";
