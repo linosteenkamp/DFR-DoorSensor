@@ -16,3 +16,7 @@ dependencies.lock
 
 # Secrets (never commit)
 include/*_credentials.h
+
+# Python
+__pycache__/
+*.pyc
