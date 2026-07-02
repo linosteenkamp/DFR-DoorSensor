@@ -37,6 +37,9 @@ module.exports = [
         model: 'DFR-DoorSensor',
         vendor: 'DFRobot-DIY',
         description: 'ESP32-C6 Zigbee-router door/contact sensor (DIY)',
+        // Bespoke line icon (open door, teal #0e9aa7) embedded as a data-URI so it
+        // ships with the definition. Source SVG: z2m/dfr_door_sensor.svg.
+        icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMGU5YWE3IiBzdHJva2Utd2lkdGg9IjEuNyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4KICA8cGF0aCBkPSJNNCAyMWgxNiIvPgogIDxwYXRoIGQ9Ik0xNCAyMVY0LjVhMSAxIDAgMCAwLTEuMi0xTDYgNS4yQTEgMSAwIDAgMCA1IDYuMlYyMSIvPgogIDxwYXRoIGQ9Ik0xNCA0LjUgMTggNmExIDEgMCAwIDEgLjcgMVYyMSIvPgogIDxwYXRoIGQ9Ik0xMS41IDEyLjV2MiIvPgo8L3N2Zz4K',
         extend: [
             // IAS Zone contact: exposes `contact`. alarm_1 (our ZoneStatus bit0 =
             // open) is mapped to z2m's contact semantics (open -> contact false).
