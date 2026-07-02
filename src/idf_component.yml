@@ -1,0 +1,5 @@
+dependencies:
+  # Pin to 1.6.x: esp_zb_* native API matched pair with esp-zboss-lib 1.6.x.
+  # The 2.x line moved to a different native API.
+  espressif/esp-zigbee-lib: "~1.6.0"
+  espressif/esp-zboss-lib: "~1.6.0"

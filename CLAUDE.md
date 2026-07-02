@@ -27,8 +27,10 @@ needs no z2m converter (IAS Zone is recognized natively).
 - **No deep sleep** — `app_main()` starts the stack and returns; the stack task runs
   forever. Reporting is event-driven off the door GPIO, not a wake-timer.
 - **No ADC, battery monitor, soil sensor, or e-paper display.**
-- Contact rides **IAS Zone (0x0500)**, recognized natively by z2m as a `contact`
-  sensor — **no custom z2m converter**; naming is done in the z2m UI (`friendly_name`).
+- Contact rides **IAS Zone (0x0500)**. z2m identifies devices by manufacturer +
+  model, so this custom model needs the external converter `z2m/dfr_door_sensor.js`
+  (maps the IAS Zone to a `contact` expose and enrolls the zone); without it z2m
+  shows the device as "Not supported". Naming is done in the z2m UI (`friendly_name`).
 
 ## Build & Flash Commands
 
@@ -83,7 +85,7 @@ Do not build that cross-repo library in this project.
 #define DOOR_CONTACT_GPIO        5         // Confirmed
 #define DOOR_DEBOUNCE_MS         40        // Snap-action debounce window
 #define KEEPALIVE_REPORT_MIN     60        // Periodic ZoneStatus refresh
-#define DOOR_CONTACT_ACTIVE_LOW  1         // Polarity for NO vs NC wiring
+#define DOOR_CONTACT_ACTIVE_LOW  0         // Polarity for NO vs NC wiring (0 = HIGH is open, per the bench unit's wiring)
 ```
 
 ## Hardware / Wiring

@@ -772,8 +772,24 @@ git commit -m "feat: door_contact GPIO/ISR/debounce module"
 
 ## Task 6: Port the OTA client
 
+> **Revised during execution:** the reference `ota_client.c` depends on three
+> MoistureTracker headers (`ota_ids.h`, `fw_version.h`, `zigbee_reporter.h`) that
+> the naive "copy verbatim" framing missed. This task now creates the two OTA
+> identity/version headers with **door-sensor** values and **decouples** the port
+> from the reporter (the door sensor has no ADC/e-paper reporting to pause during
+> OTA). Decoupling also keeps `ota_client` reporter-agnostic — better for the
+> future `esp-zb-common` extraction.
+>
+> **Further ED-ism removals (surfaced at full link in Task 8):** the reference OTA
+> burst helpers also managed the receiver for a sleepy end-device —
+> `esp_zb_sleep_enable()` (absent from the router `zczr` lib, a hard link error)
+> and `esp_zb_set_rx_on_when_idle(true/false)`. A router keeps `rx_on_when_idle`
+> true at all times (set once in `zb_router`), and restoring it to `false` on OTA
+> abort/error would silently kill the router's receiver. Both were removed from
+> `ota_client.c`; the OTA burst now only arms/disarms the stall watchdog.
+
 **Files:**
-- Create: `include/ota_client.h`, `src/ota_client.c` (ported verbatim from `../DFR-MoistureTracker`)
+- Create: `include/ota_ids.h`, `include/fw_version.h`, `include/ota_client.h`, `src/ota_client.c`
 - Modify: `src/CMakeLists.txt` (add `ota_client.c`)
 
 **Interfaces:**
@@ -781,33 +797,73 @@ git commit -m "feat: door_contact GPIO/ISR/debounce module"
 - Produces (used by Task 7):
   - `esp_err_t ota_client_on_value(const esp_zb_zcl_ota_upgrade_value_message_t *msg);`
   - `void ota_client_add_cluster(esp_zb_cluster_list_t *clusters);`
-  - `void ota_client_start(uint8_t endpoint);` — records the client endpoint + query interval. **See Step 3:** its core-action-handler registration is removed, because `zb_router` owns the single global dispatcher.
+  - `void ota_client_start(uint8_t endpoint);` — records the client endpoint + query interval. Its core-action-handler registration is removed (Step 4), because `zb_router` owns the single global dispatcher.
   - `void ota_client_on_joined(void);`
   - `bool ota_client_image_pending_verify(void);`
   - `void ota_client_mark_valid(void);`
 
-- [ ] **Step 1: Copy the header verbatim**
+- [ ] **Step 1: Create `include/ota_ids.h` with door-sensor OTA identity**
 
-Run: `cp ../DFR-MoistureTracker/include/ota_client.h include/ota_client.h`
-This file is transport-agnostic; no edits needed.
+These three values MUST match across the firmware, the `.ota` image header, and
+the z2m OTA index. Manufacturer code stays the shared DIY `0xFEFE`; image type is
+`0x0002` (the soil sensor is `0x0001`) so z2m never cross-serves soil firmware;
+model id matches the Basic-cluster model string used in Task 7.
 
-- [ ] **Step 2: Copy the implementation verbatim**
+```c
+#ifndef OTA_IDS_H
+#define OTA_IDS_H
 
-Run: `cp ../DFR-MoistureTracker/src/ota_client.c src/ota_client.c`
+#include <stdint.h>
 
-- [ ] **Step 3: Remove the core-action-handler registration from the port**
+/* Fixed product identity for Zigbee OTA. These three values MUST match across
+ * the firmware, the .ota image header, and the z2m OTA index. */
+#define OTA_MANUFACTURER_CODE  0xFEFEu   /* shared DIY 16-bit code */
+#define OTA_IMAGE_TYPE         0x0002u   /* door sensor (soil sensor is 0x0001) */
+#define OTA_MODEL_ID           "DFR-DoorSensor"
 
-In `src/ota_client.c`, `ota_client_start()` currently calls
-`esp_zb_core_action_handler_register(zb_action_handler);`. Only one global core
-action handler may exist, and `zb_router` (Task 7) registers the shared one that
-dispatches OTA **and** IAS Zone callbacks. Delete that single registration line
-from `ota_client_start()` and instead expose the OTA dispatch through the already-public
-`ota_client_on_value()`. Also mark the now-unused static `zb_action_handler` in
-`ota_client.c` as removed (delete the function) — its OTA branch moves into
-`zb_router`'s dispatcher in Task 7. Keep everything else (`ota_client_on_value`,
-`ota_client_add_cluster`, endpoint capture, query arming, rollback helpers) intact.
+/* Pack semver into the 32-bit Zigbee fileVersion as 0xMMmmpp bb
+ * (major, minor, patch, build). Monotonic: higher semver => larger uint32. */
+#define OTA_PACK_VERSION(major, minor, patch, build)            \
+    (((uint32_t)(major) << 24) | ((uint32_t)(minor) << 16) |    \
+     ((uint32_t)(patch) << 8)  |  (uint32_t)(build))
 
-- [ ] **Step 4: Add `ota_client.c` to `src/CMakeLists.txt`**
+#endif /* OTA_IDS_H */
+```
+
+- [ ] **Step 2: Copy `include/fw_version.h` verbatim (product-agnostic)**
+
+Run: `cp ../DFR-MoistureTracker/include/fw_version.h include/fw_version.h`
+No edits — it only defines version macros and includes `ota_ids.h`.
+
+- [ ] **Step 3: Copy the OTA client header + implementation**
+
+Run:
+```bash
+cp ../DFR-MoistureTracker/include/ota_client.h include/ota_client.h   # transport-agnostic; no edits
+cp ../DFR-MoistureTracker/src/ota_client.c src/ota_client.c
+```
+
+- [ ] **Step 4: Edit the ported `src/ota_client.c` — three removals**
+
+Make exactly these changes; keep everything else (`ota_client_on_value`,
+`ota_client_add_cluster`, endpoint capture, query arming, rollback helpers) intact:
+
+1. **Remove the shared-handler registration.** In `ota_client_start()`, delete the
+   single line `esp_zb_core_action_handler_register(zb_action_handler);`. `zb_router`
+   (Task 7) registers the one global handler and dispatches OTA via the public
+   `ota_client_on_value()`.
+2. **Delete the now-unused static `zb_action_handler`** function (the small static
+   that switches on `cb_id == ESP_ZB_CORE_OTA_UPGRADE_VALUE_CB_ID` and returns
+   `ota_client_on_value(...)`).
+3. **Decouple from the reporter.** Delete `#include "zigbee_reporter.h"` and the two
+   calls `zigbee_reporter_set_reports_paused(true)` / `...(false)` (in the OTA
+   burst begin/end paths). The door sensor has no frequent reporting to pause, so
+   the pause is a no-op here; removing it keeps `ota_client` reporter-agnostic.
+
+If any deletion leaves an unused include or forward declaration that warns, remove
+just that. Do not otherwise touch includes.
+
+- [ ] **Step 5: Add `ota_client.c` to `src/CMakeLists.txt`**
 
 ```cmake
 set(SRCS
@@ -819,21 +875,31 @@ set(SRCS
 )
 ```
 
-- [ ] **Step 5: Build to confirm the port compiles**
+- [ ] **Step 6: Build to confirm the port compiles**
 
 Run: `pio run -e dfrobot_firebeetle2_esp32c6_zigbee`
-Expected: build SUCCESS. (End-to-end OTA is validated on-device in Task 9.)
+Expected: build SUCCESS, no new warnings from the edits. `ota_client_add_cluster`/
+`ota_client_start` are not called by anything yet (zb_router arrives in Task 7) —
+they only need to compile. End-to-end OTA is validated on-device in Task 9.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add include/ota_client.h src/ota_client.c src/CMakeLists.txt
-git commit -m "chore: port Zigbee OTA client from MoistureTracker (handler registration deferred to zb_router)"
+git add include/ota_ids.h include/fw_version.h include/ota_client.h src/ota_client.c src/CMakeLists.txt
+git commit -m "chore: port Zigbee OTA client (door-sensor identity, reporter-decoupled, handler deferred to zb_router)"
 ```
 
 ---
 
 ## Task 7: `zb_router` — Zigbee router bring-up + IAS Zone + shared dispatcher (on-device)
+
+> **Revised during execution (deadlock fix):** the original Step 3/4 code called the
+> lock-taking `zb_router_set_contact()` from `on_joined()` and `keepalive_cb()`, which
+> both run in Zigbee callback context where the stack lock is already held —
+> `esp_zb_lock_acquire()` there self-deadlocks the stack task on every join. Split into
+> a no-lock `apply_contact_no_lock()` (for stack-context callers) and the lock-taking
+> public `zb_router_set_contact()` (for external app tasks), mirroring the reference
+> project's `update_attributes_no_lock` / `zigbee_reporter_report` split.
 
 **Files:**
 - Create: `include/zb_router.h`, `src/zb_router.c`
@@ -928,8 +994,9 @@ static volatile bool s_pending_open = false;  /* last requested state (pre/post 
 Append to `src/zb_router.c`:
 
 ```c
-/* forward decl */
+/* forward decls */
 static void keepalive_cb(uint8_t param);
+static void apply_contact_no_lock(bool open);   /* caller must hold the Zigbee lock */
 
 /* Single global core-action dispatcher: OTA + IAS Zone. Only ONE may be
  * registered stack-wide, so it lives here (ota_client's own registration was
@@ -961,8 +1028,10 @@ static void on_joined(void)
     ESP_LOGI(TAG, "joined network, short addr 0x%04hx", esp_zb_get_short_address());
     ota_client_on_joined();
     /* Apply the latest door state now that the network is up, then start the
-     * keepalive refresh cycle. */
-    zb_router_set_contact(s_pending_open);
+     * keepalive refresh cycle. We are in Zigbee callback context (the signal
+     * handler already holds the Zigbee lock), so use the no-lock apply — calling
+     * the lock-taking zb_router_set_contact() here would self-deadlock. */
+    apply_contact_no_lock(s_pending_open);
     esp_zb_scheduler_alarm(keepalive_cb, 0, 1000U);
 }
 
@@ -1011,15 +1080,45 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
 
 Append to `src/zb_router.c`:
 
+Two-context split (mirrors the reference project's `update_attributes_no_lock` /
+`zigbee_reporter_report` pattern). `apply_contact_no_lock()` writes the ZoneStatus
+attribute **without** taking the Zigbee lock — the caller must already hold it.
+Stack-context callers (`on_joined`, `keepalive_cb`, both run from Zigbee callbacks
+that already hold the lock) call it directly. The public `zb_router_set_contact()`,
+invoked from external application tasks (e.g. the door_contact `esp_timer` callback),
+takes the lock and then delegates. Acquiring the lock from a context that already
+holds it would self-deadlock the stack task, so the two paths must stay distinct.
+
 ```c
-/* Re-apply the current ZoneStatus periodically as a state-recovery keepalive. */
+/* Write the IAS Zone ZoneStatus attribute WITHOUT taking the Zigbee lock. The
+ * caller MUST already hold it — either running in Zigbee stack/callback context
+ * (signal handler, scheduler alarm) or wrapped in esp_zb_lock_acquire/release. */
+static void apply_contact_no_lock(bool open)
+{
+    s_zone_status = ias_zone_status_encode(open);
+    esp_zb_zcl_set_attribute_val(APP_ENDPOINT,
+                                 ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE,
+                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                 ESP_ZB_ZCL_ATTR_IAS_ZONE_ZONESTATUS_ID,
+                                 &s_zone_status,
+                                 false);
+    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x)", open ? "OPEN" : "CLOSED", s_zone_status);
+}
+
+/* Re-apply the current ZoneStatus periodically as a state-recovery keepalive.
+ * Runs in Zigbee scheduler/stack context (lock already held) -> no-lock apply. */
 static void keepalive_cb(uint8_t param)
 {
     (void)param;
-    zb_router_set_contact(s_pending_open);
+    if (s_joined) {
+        apply_contact_no_lock(s_pending_open);
+    }
     esp_zb_scheduler_alarm(keepalive_cb, 0, KEEPALIVE_REPORT_MIN * 60U * 1000U);
 }
 
+/* Public setter for EXTERNAL application tasks (not stack callbacks). Takes the
+ * Zigbee lock, then delegates to the no-lock apply. Safe before join: the value
+ * is cached in s_pending_open and applied by on_joined() once the network is up. */
 void zb_router_set_contact(bool open)
 {
     s_pending_open = open;
@@ -1030,15 +1129,8 @@ void zb_router_set_contact(bool open)
         ESP_LOGE(TAG, "failed to acquire Zigbee lock");
         return;
     }
-    s_zone_status = ias_zone_status_encode(open);
-    esp_zb_zcl_set_attribute_val(APP_ENDPOINT,
-                                 ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE,
-                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
-                                 ESP_ZB_ZCL_ATTR_IAS_ZONE_ZONESTATUS_ID,
-                                 &s_zone_status,
-                                 false);
+    apply_contact_no_lock(open);
     esp_zb_lock_release();
-    ESP_LOGI(TAG, "ZoneStatus <- %s (0x%04x)", open ? "OPEN" : "CLOSED", s_zone_status);
 }
 ```
 

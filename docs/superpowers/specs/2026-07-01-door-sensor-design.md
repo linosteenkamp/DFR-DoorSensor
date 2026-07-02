@@ -23,9 +23,15 @@ No battery monitoring, no deep sleep, no ADC, no display.
 - Clean module seams so the reusable core can later be extracted into a shared
   `esp-zb-common` library (its own future spec).
 
+### Corrected during bring-up
+- **A z2m external converter IS required** (`z2m/dfr_door_sensor.js`). The original
+  assumption that "IAS Zone contact sensors are recognized natively, no converter
+  needed" was **wrong**: z2m matches definitions by manufacturer + model, so the
+  custom `DFRobot-DIY` / `DFR-DoorSensor` shows as "Not supported" until a definition
+  is loaded — even though IAS Zone is a standard cluster. Device naming is still done
+  in the z2m UI via `friendly_name`.
+
 ### Out of scope (YAGNI for v1)
-- **Custom z2m converter.** IAS Zone contact sensors are recognized natively; naming
-  and any label handling is done in the Zigbee2MQTT UI via `friendly_name`.
 - Config portal (SoftAP), NVS device-naming, Basic LocationDescription label.
 - Status LED, e-paper display, battery monitoring.
 - Tamper detection via the spare SPDT throw.
@@ -99,14 +105,19 @@ device definition. No separate `device_config` module in v1.
   relays for neighbours.
 - **Enrollment:** respond to the coordinator's CIE address write and the zone-enroll
   request so z2m marks the zone enrolled.
-- **Reporting:** **instant** `ZoneStatusChangeNotification` on every debounced edge,
-  plus a periodic status refresh (default **60 min**) as a keepalive / state-recovery
-  safety net.
+- **Reporting:** **instant** `ZoneStatusChangeNotification` **command** (cluster cmd
+  0x00) to the coordinator on every debounced edge, plus a periodic refresh (default
+  **60 min**) as a keepalive / state-recovery safety net. Confirmed on-device: setting
+  the ZoneStatus *attribute* (even with reporting configured) is invisible to z2m — the
+  status-change *command* is the delivery mechanism. Firmware sends
+  `esp_zb_zcl_ias_zone_status_change_notif_cmd_req()` addressed to `0x0000`/ep 1.
 - **ZoneStatus:** bit 0 (alarm1) = contact open. Contact polarity (which switch throw
-  counts as "closed") is set by compile-time flag `DOOR_CONTACT_ACTIVE_LOW`, allowing
-  either NO or NC wiring.
-- **z2m:** IAS Zone contact sensors are recognized natively — **no custom converter**.
-  Device naming/labels are handled directly in the Zigbee2MQTT UI (`friendly_name`).
+  counts as "closed") is set by compile-time flag `DOOR_CONTACT_ACTIVE_LOW` (the bench
+  unit uses `0` = HIGH-is-open), allowing either NO or NC wiring.
+- **z2m:** requires the external converter `z2m/dfr_door_sensor.js`
+  (`modernExtend.iasZoneAlarm({zoneType:'contact', zoneAttributes:['alarm_1']})`,
+  `ota:true`); a custom manufacturer/model is not auto-supported. Standard mapping:
+  `alarm_1`=1 → `contact:false` (open). Naming via the z2m UI (`friendly_name`).
 
 ## 6. Hardware / Wiring
 
