@@ -15,8 +15,10 @@ end-device — it stays awake, relays traffic, and extends the mesh.
 **Reference project:** the sibling `../DFR-MoistureTracker` established the
 ESP-IDF/PlatformIO layout, native `esp_zb_*` Zigbee bring-up, and the OTA +
 partition/rollback scheme. Follow its conventions; this project strips out the
-battery/ADC/display/deep-sleep parts, swaps the end-device role for a router, and
-needs no z2m converter (IAS Zone is recognized natively).
+battery/ADC/display/deep-sleep parts and swaps the end-device role for a router.
+IAS Zone is a standard cluster, but z2m matches devices by manufacturer + model, so
+this DIY model still needs the external converter `z2m/dfr_door_sensor.js` to expose
+`contact` and enroll the zone (see Key Differences below).
 
 **Design spec:** [docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md](docs/superpowers/specs/archive/2026-07-01-door-sensor-design.md) (implemented — archived)
 
