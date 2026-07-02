@@ -113,7 +113,7 @@ device definition. No separate `device_config` module in v1.
   `esp_zb_zcl_ias_zone_status_change_notif_cmd_req()` addressed to `0x0000`/ep 1.
 - **ZoneStatus:** bit 0 (alarm1) = contact open. Contact polarity (which switch throw
   counts as "closed") is set by compile-time flag `DOOR_CONTACT_ACTIVE_LOW` (the bench
-  unit uses `0` = HIGH-is-open), allowing either NO or NC wiring.
+  unit uses `1` = LOW-is-open; corrected in v1.0.1), allowing either NO or NC wiring.
 - **z2m:** requires the external converter `z2m/dfr_door_sensor.js`
   (`modernExtend.iasZoneAlarm({zoneType:'contact', zoneAttributes:['alarm_1']})`,
   `ota:true`); a custom manufacturer/model is not auto-supported. Standard mapping:
