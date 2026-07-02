@@ -3,9 +3,9 @@
     "modelId": "DFR-DoorSensor",
     "manufacturerCode": 65278,
     "imageType": 2,
-    "fileVersion": 16777472,
-    "url": "https://github.com/linosteenkamp/DFR-DoorSensor/releases/download/v1.0.1/firmware-1.0.1.ota",
+    "fileVersion": 16842754,
+    "url": "https://github.com/linosteenkamp/DFR-DoorSensor/releases/download/v1.0.2/firmware-1.0.2.ota",
     "fileSize": 616238,
-    "sha512": "db9120c9fe143f29d5d2eb8a1d7daafaf13367796846f0c8e208b5bd5754c9197118edbf639fa0b9a19c4204660fdf61a60e8b7edcb754d11969d1d700916aba"
+    "sha512": "2edd3a07800674aa19f6e7b94caf84e5b8adcff8535f65be97b6e2acec41da4f160844ae25dee2a543c91e62c79ae51e268a5e616876c81a330b16a94e118b19"
   }
 ]
