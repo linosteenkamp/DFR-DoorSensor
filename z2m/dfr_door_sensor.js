@@ -24,7 +24,7 @@
 //
 // OTA: in zigbee2mqtt configuration.yaml set:
 //   ota:
-//     zigbee_ota_override_index_location: https://raw.githubusercontent.com/linosteenkamp/DFR-DoorSensor/main/ota/index.json
+//     zigbee_ota_override_index_location: https://raw.githubusercontent.com/linosteenkamp/DFR-DoorSensor/master/ota/index.json
 //     disable_automatic_update_check: true   # staged/manual rollout
 // The definition opts in via `ota: true`; z2m matches an image by manufacturerCode
 // 0xFEFE + imageType 0x0002 (distinct from the soil sensor's 0x0001).

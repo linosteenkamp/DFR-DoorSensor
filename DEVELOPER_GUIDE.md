@@ -292,8 +292,8 @@ Add (or extend) the `ota:` block in zigbee2mqtt's `configuration.yaml`:
 
 ```yaml
 ota:
-  # Raw GitHub URL of ota/index.json on the default branch (main):
-  zigbee_ota_override_index_location: "https://raw.githubusercontent.com/linosteenkamp/DFR-DoorSensor/main/ota/index.json"
+  # Raw GitHub URL of ota/index.json on the default branch (master):
+  zigbee_ota_override_index_location: "https://raw.githubusercontent.com/linosteenkamp/DFR-DoorSensor/master/ota/index.json"
   # Roll out manually, one device at a time:
   disable_automatic_update_check: true
 ```
